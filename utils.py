@@ -14,6 +14,7 @@ def read_args():
     parser.add_argument('--exp_name', type=str, default=None, help='Experiment name for CometML logging')
     parser.add_argument('--evaluate_every', type=int, default=100, help='Episodes before evaluating model')
     parser.add_argument('--checkpoint_every', type=int, default=1000, help='Episodes before saving model checkpoint')
+    parser.add_argument('--seed', type=int, default=1, help='Seed for random number generators')
 
     parser.add_argument('--num_episodes', type=int, default=10000, help='number of episodes for training')
     parser.add_argument('--max_try_novel', type=int, default=100, help='number of attempts to find a novel episode (not in tabu list) before throwing an error')

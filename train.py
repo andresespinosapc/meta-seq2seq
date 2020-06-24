@@ -172,6 +172,9 @@ if __name__ == "__main__":
     experiment.set_name(args.exp_name)
     log_comet_parameters(args)
 
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+
     fn_out_model = args.fn_out_model
     episode_type = args.episode_type
     dir_model = args.dir_model
