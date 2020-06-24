@@ -4,6 +4,8 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+from comet_ml import Experiment
+
 import random
 import os
 import time
@@ -17,6 +19,30 @@ from masked_cross_entropy import *
 from generate_episode import get_episode_generator
 from utils import timeSince, display_input_output, extract, tabu_update, read_args
 from utils import SOS_token, EOS_token, PAD_token
+
+
+comet_args = {
+    'project_name': os.environ.get('COMET_PROJECT_NAME'),
+    'workspace': os.environ.get('COMET_WORKSPACE'),
+}
+if os.environ.get('COMET_DISABLE'):
+    comet_args['disabled'] = True
+    comet_args['api_key'] = ''
+if os.environ.get('COMET_OFFLINE'):
+    comet_args['api_key'] = ''
+    comet_args['offline_directory'] = 'comet_offline'
+    experiment = OfflineExperiment(**comet_args)
+else:
+    experiment = Experiment(**comet_args)
+
+def log_comet_parameters(args):
+    args_dict = vars(args)
+    for key in args_dict.keys():
+        experiment.log_parameter(key, args_dict[key])
+
+def validate_args(parser, args):
+    if args.exp_name is None and not comet_args.get('disabled'):
+        parser.error('Please provide exp_name if logging to CometML')
 
 # --
 # Main routine for training meta seq2seq models
@@ -141,7 +167,11 @@ def train(sample, model, optimizer, input_lang, output_lang):
 
 if __name__ == "__main__":
     # Adjustable parameters
-    args = read_args()
+    parser, args = read_args()
+    validate_args(parser, args)
+    experiment.set_name(args.exp_name)
+    log_comet_parameters(args)
+
     fn_out_model = args.fn_out_model
     episode_type = args.episode_type
     dir_model = args.dir_model
@@ -153,7 +183,7 @@ if __name__ == "__main__":
     args.use_cuda = args.use_cuda if torch.cuda.is_available() else False
 
     if fn_out_model=='':
-        fn_out_model = 'net_'  + episode_type + '.tar'
+        fn_out_model = experiment.get_key()
     if not os.path.exists(dir_model):
         os.makedirs(dir_model)
     fn_out_model = os.path.join(dir_model, fn_out_model)
@@ -205,30 +235,40 @@ if __name__ == "__main__":
             avg_train_loss += train_loss
             counter += 1
 
-            if episode == 1 or episode % 100 == 0 or episode == num_episodes:
+            if episode == 1 or episode % args.evaluate_every == 0 or episode == num_episodes:
                 acc_val_gen, acc_val_retrieval = evaluation_battery(samples_val, model, input_lang, output_lang, max_length_eval)
                 print('{:s} ({:d} {:.0f}% finished) TrainLoss: {:.4f}, ValAccRetrieval: {:.1f}, ValAccGeneralize: {:.1f}'.format(timeSince(start, float(episode) / float(num_episodes)),
                                          episode, float(episode) / float(num_episodes) * 100., avg_train_loss/counter, acc_val_retrieval, acc_val_gen))
+
+                metrics = {
+                    'episode': episode,
+                    'train_loss': avg_train_loss / counter,
+                    'acc_val_gen': acc_val_gen,
+                    'acc_val_retrieval': acc_val_retrieval
+                }
+                experiment.log_metrics(metrics)
+
                 avg_train_loss = 0.
                 counter = 0
-                if episode % 1000 == 0 or episode == num_episodes:
-                    state = {'state_dict': model.state_dict(),
-                                'input_lang': input_lang,
-                                'output_lang': output_lang,
-                                'episodes_validation': samples_val,
-                                'episode_type': episode_type,
-                                'emb_size':args.emb_size,
-                                'dropout':args.dropout,
-                                'nlayers':args.nlayers,
-                                'episode':episode,
-                                'disable_memory':args.disable_memory,
-                                'disable_recon_loss':args.disable_recon_loss,
-                                'use_attention':use_attention,
-                                'max_length_eval':max_length_eval,
-                                'num_episodes':num_episodes,
-                                'args':args}
-                    print('Saving model as: ' + fn_out_model)
-                    torch.save(state, fn_out_model)
+
+            if episode % args.checkpoint_every == 0 or episode == num_episodes:
+                state = {'state_dict': model.state_dict(),
+                            'input_lang': input_lang,
+                            'output_lang': output_lang,
+                            'episodes_validation': samples_val,
+                            'episode_type': episode_type,
+                            'emb_size':args.emb_size,
+                            'dropout':args.dropout,
+                            'nlayers':args.nlayers,
+                            'episode':episode,
+                            'disable_memory':args.disable_memory,
+                            'disable_recon_loss':args.disable_recon_loss,
+                            'use_attention':use_attention,
+                            'max_length_eval':max_length_eval,
+                            'num_episodes':num_episodes,
+                            'args':args}
+                print('Saving model as: ' + fn_out_model)
+                torch.save(state, fn_out_model)
 
             # decay learning rate according to schedule
             # TODO: CURRENTLY resets optimizer data!

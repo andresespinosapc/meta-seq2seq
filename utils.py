@@ -1,3 +1,4 @@
+import os
 import math
 import time
 import argparse
@@ -10,6 +11,10 @@ PAD_token = SOS_token # padding symbol
 # Adjustable parameters
 def read_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--exp_name', type=str, default=None, help='Experiment name for CometML logging')
+    parser.add_argument('--evaluate_every', type=int, default=100, help='Episodes before evaluating model')
+    parser.add_argument('--checkpoint_every', type=int, default=1000, help='Episodes before saving model checkpoint')
+
     parser.add_argument('--num_episodes', type=int, default=10000, help='number of episodes for training')
     parser.add_argument('--max_try_novel', type=int, default=100, help='number of attempts to find a novel episode (not in tabu list) before throwing an error')
     parser.add_argument('--num_episodes_val', type=int, default=5, help='number of episodes to use as validation throughout learning')
@@ -29,7 +34,8 @@ def read_args():
     parser.add_argument('--disable_attention', action='store_true', help='Disable the decoder attention')
     parser.add_argument('--disable_recon_loss', action='store_true', help='Disable reconstruction loss, where support items are included also as query items')
     parser.add_argument('--use_cuda', action='store_true', help='Enable cuda')
-    return parser.parse_args()
+
+    return parser, parser.parse_args()
 
 def asMinutes(s):
     # convert seconds to minutes
