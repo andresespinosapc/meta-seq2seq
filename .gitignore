@@ -1,3 +1,7 @@
+# Slurm
+slurm*
+job*
+
 *.pyc
 out_models/
 venv
